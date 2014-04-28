@@ -33,38 +33,36 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.log4j.MDC;
 import org.brekka.logtools.Host;
 
 public class AccessLogFilter implements Filter {
 
-    private String host;
-
-    private int port;
-
-    private int connectionTimeoutMillis;
-
-    private int socketTimeoutMillis;
-
-    private int priority = 4;
-
-    private int eventBufferSize = 1000;
+    private static final Logger logger = Logger.getLogger(AccessLogFilter.class);
     
     private String localHostName;
 
-    private volatile Dispatcher dispatcher;
     private Host localHost;
     
     private String mdcProperties;
-    private volatile Map<String,String> mdcProps;
+    
+    private Map<String,String> mdcProps;
+
+    private Level priority;
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
-        host = getParamOrDefault(filterConfig,"host",null);
-        port = Integer.valueOf(getParamOrDefault(filterConfig,"port","0"));
-        connectionTimeoutMillis = Integer.valueOf(getParamOrDefault(filterConfig,"connectionTimeoutMillis","0"));
         localHostName = getParamOrDefault(filterConfig,"localHostName",null);
         mdcProperties = getParamOrDefault(filterConfig, "mdcProperties", null);
+        priority = Level.toLevel(getParamOrDefault(filterConfig, "priority", "DEBUG"));
+        if (localHostName != null) {
+            localHost = new Host(localHostName);
+        } else {
+            localHost = new Host();
+        }
+        initMDCProperties();
     }
     
     protected String getParamOrDefault(FilterConfig filterConfig, String paramName,String defaultValue){
@@ -80,13 +78,16 @@ public class AccessLogFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
         try {
-            HttpServletRequest req = (HttpServletRequest) request;
-            HttpServletResponse resp = (HttpServletResponse) response;
-            log(req, resp, System.nanoTime());
-        } catch (Exception e){
-            //Logging error doesn't prevent filter chain execution
+            chain.doFilter(request, response);
+        } finally {
+            try {
+                HttpServletRequest req = (HttpServletRequest) request;
+                HttpServletResponse resp = (HttpServletResponse) response;
+                log(req, resp, System.nanoTime());
+            } catch (Exception e){
+                //Logging error doesn't prevent filter chain execution
+            }
         }
-        chain.doFilter(request, response);
     }
 
 
@@ -98,10 +99,8 @@ public class AccessLogFilter implements Filter {
     
     protected void log(HttpServletRequest req, HttpServletResponse resp, long time) {
         // Log as normal
-        initDispatcher();
-        initMDCProperties();
         String eventJson = toJsonString(req, resp, time);
-        dispatcher.dispatchMessage(eventJson);
+        logger.log(priority, eventJson);
     }
     
 
@@ -178,140 +177,5 @@ public class AccessLogFilter implements Filter {
         // Last (no trailing comma)
         out.printf("\"status_code\": %d", resp.getStatus());
     }
-
-    /**
-     * 
-     */
-    private void initDispatcher() {
-        if (dispatcher == null) {
-            synchronized (this) {
-                if (dispatcher == null) {
-                    TCPClient client = new TCPClient(host, port);
-                    client.setConnectionTimeout(connectionTimeoutMillis);
-                    client.setSocketTimeout(socketTimeoutMillis);
-                    dispatcher = new Dispatcher(client, eventBufferSize, priority);
-                    if (localHostName != null) {
-                        localHost = new Host(localHostName);
-                    } else {
-                        localHost = new Host();
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * @return the host
-     */
-    public String getHost() {
-        return host;
-    }
-
-    /**
-     * @param host
-     *            the host to set
-     */
-    public void setHost(String host) {
-        this.host = host;
-    }
-
-    /**
-     * @return the port
-     */
-    public int getPort() {
-        return port;
-    }
-
-    /**
-     * @param port
-     *            the port to set
-     */
-    public void setPort(int port) {
-        this.port = port;
-    }
-
-    /**
-     * @return the connectionTimeoutMillis
-     */
-    public int getConnectionTimeoutMillis() {
-        return connectionTimeoutMillis;
-    }
-
-    /**
-     * @param connectionTimeoutMillis
-     *            the connectionTimeoutMillis to set
-     */
-    public void setConnectionTimeoutMillis(int connectionTimeoutMillis) {
-        this.connectionTimeoutMillis = connectionTimeoutMillis;
-    }
-
-    /**
-     * @return the socketTimeoutMillis
-     */
-    public int getSocketTimeoutMillis() {
-        return socketTimeoutMillis;
-    }
-
-    /**
-     * @param socketTimeoutMillis
-     *            the socketTimeoutMillis to set
-     */
-    public void setSocketTimeoutMillis(int socketTimeoutMillis) {
-        this.socketTimeoutMillis = socketTimeoutMillis;
-    }
-
-    /**
-     * @return the eventBufferSize
-     */
-    public int getEventBufferSize() {
-        return eventBufferSize;
-    }
-
-    /**
-     * @param eventBufferSize
-     *            the eventBufferSize to set
-     */
-    public void setEventBufferSize(int eventBufferSize) {
-        this.eventBufferSize = eventBufferSize;
-    }
-
-    /**
-     * @return the priority
-     */
-    public int getPriority() {
-        return priority;
-    }
-
-    /**
-     * @param priority
-     *            the priority to set
-     */
-    public void setPriority(int priority) {
-        this.priority = priority;
-    }
-
-    /**
-     * @return the localHostName
-     */
-    public String getLocalHostName() {
-        return localHostName;
-    }
-
-    /**
-     * @param localHostName the localHostName to set
-     */
-    public void setLocalHostName(String localHostName) {
-        this.localHostName = localHostName;
-    }
-
-
-
-    /**
-     * @param mdcProperties the mdcProperties to set
-     */
-    public void setMdcProperties(String mdcProperties) {
-        this.mdcProperties = mdcProperties;
-    }
-
     
 }
