@@ -18,9 +18,14 @@ package org.brekka.logtools.stash;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
+import org.apache.log4j.MDC;
 import org.brekka.logtools.Host;
 
 /**
@@ -46,6 +51,9 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
 
     private volatile Dispatcher dispatcher;
     private Host localHost;
+    
+    private String mdcProperties;
+    private volatile Map<String,String> mdcProps;
 
     /*
      * (non-Javadoc)
@@ -58,10 +66,37 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
         // Log as normal
         super.log(request, response, time);
         initDispatcher();
+        initMDCProperties();
         String eventJson = toJsonString(request, response, time);
         dispatcher.dispatchMessage(eventJson);
     }
     
+
+
+    /**
+     * 
+     */
+    private void initMDCProperties() {
+        if (mdcProps == null) {
+            synchronized (this) {
+                if (mdcProps == null) {
+                    if (mdcProperties !=null && mdcProperties.length()!=0){
+                        String[] propList = mdcProperties.split(",");
+                        Map<String, String> map = new LinkedHashMap<String, String>(propList.length);
+                        for (final String keyValue : propList) {
+                            String[] split2 = keyValue.split("=");
+                            map.put(split2[0], split2[1]);
+                        }
+                        mdcProps = map;
+                    } else {
+                        mdcProps = Collections.emptyMap();
+                    }
+                }
+            }
+        }
+        
+    }
+
 
 
     /**
@@ -101,6 +136,9 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
         out.printf("\"protocol\": \"%s\",", request.getProtocol());
         out.printf("\"method\": \"%s\",", request.getMethod());
         out.printf("\"request_content_type\": \"%s\",", request.getContentType());
+        for (Entry<String,String> mdcEntry : mdcProps.entrySet()){
+            out.printf("\"%s\": \"%s\",", mdcEntry.getKey(), MDC.get(mdcEntry.getValue()));
+        }
 
         // Response
         out.printf("\"response_length\": %d,", response.getContentLength());
@@ -232,5 +270,14 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
      */
     public void setLocalHostName(String localHostName) {
         this.localHostName = localHostName;
+    }
+
+
+
+    /**
+     * @param mdcProperties the mdcProperties to set
+     */
+    public void setMdcProperties(String mdcProperties) {
+        this.mdcProperties = mdcProperties;
     }
 }
