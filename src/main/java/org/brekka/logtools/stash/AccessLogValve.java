@@ -82,7 +82,7 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
                 if (mdcProps == null) {
                     if (mdcProperties !=null && mdcProperties.length()!=0){
                         String[] propList = mdcProperties.split(",");
-                        Map<String, String> map = new LinkedHashMap<String, String>(propList.length);
+                        Map<String, String> map = new LinkedHashMap<>(propList.length);
                         for (final String keyValue : propList) {
                             String[] split2 = keyValue.split("=");
                             map.put(split2[0], split2[1]);
