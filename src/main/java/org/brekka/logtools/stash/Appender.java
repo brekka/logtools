@@ -18,6 +18,10 @@ package org.brekka.logtools.stash;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
@@ -49,6 +53,9 @@ public class Appender extends AppenderSkeleton {
 
     private volatile Dispatcher dispatcher;
     private Host localHost;
+    
+    private String mdcProperties;
+    private volatile Map<String,String> mdcProps;
 
     /*
      * (non-Javadoc)
@@ -197,6 +204,7 @@ public class Appender extends AppenderSkeleton {
     @Override
     protected void append(LoggingEvent event) {
         initDispatcher();
+        initMDCProperties();
         String eventJson = toJsonString(event);
         dispatcher.dispatchMessage(eventJson);
     }
@@ -230,6 +238,9 @@ public class Appender extends AppenderSkeleton {
     protected void processFields(LoggingEvent event, PrintWriter out) {
         out.printf("\"logger_name\":\"%s\",", event.getLoggerName());
         out.printf("\"thread\":\"%s\",", event.getThreadName());
+        for (Entry<String,String> mdcEntry : mdcProps.entrySet()){
+            out.printf("\"%s\": \"%s\",", mdcEntry.getKey(), event.getMDC(mdcEntry.getValue()));
+        }
         if (application != null) {
             out.printf("\"application\":\"%s\",", application);
         }
@@ -276,5 +287,36 @@ public class Appender extends AppenderSkeleton {
                 }
             }
         }
+    }
+    
+    /**
+     * 
+     */
+    private void initMDCProperties() {
+        if (mdcProps == null) {
+            synchronized (this) {
+                if (mdcProps == null) {
+                    if (mdcProperties !=null && mdcProperties.length()!=0){
+                        String[] propList = mdcProperties.split(",");
+                        Map<String, String> map = new LinkedHashMap<String, String>(propList.length);
+                        for (final String keyValue : propList) {
+                            String[] split2 = keyValue.split("=");
+                            map.put(split2[0], split2[1]);
+                        }
+                        mdcProps = map;
+                    } else {
+                        mdcProps = Collections.emptyMap();
+                    }
+                }
+            }
+        }
+        
+    }
+
+    /**
+     * @param mdcProperties the mdcProperties to set
+     */
+    public void setMdcProperties(String mdcProperties) {
+        this.mdcProperties = mdcProperties;
     }
 }
