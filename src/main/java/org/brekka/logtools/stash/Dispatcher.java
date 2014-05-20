@@ -68,6 +68,17 @@ class Dispatcher {
     }
     
     public void close() {
+        try {
+            executorService.submit(new Runnable() {
+                
+                @Override
+                public void run() {
+                    client.close();
+                }
+            });
+        } catch (RejectedExecutionException e){
+            //Leave the socket open and hope the finalizer gets it
+        }
         if (!executorService.isShutdown()) {
             executorService.shutdown();
             try {
@@ -76,7 +87,7 @@ class Dispatcher {
                 // Ignore
             }
         }
-        client.close();
+        
     }
 
     public void dispatchMessage(final String message) {
