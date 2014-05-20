@@ -51,13 +51,6 @@ public class DispatcherTest {
     
     @After
     public void tearDown() throws Exception {
-        doAnswer(new Answer<Void>() {
-
-            @Override
-            public Void answer(InvocationOnMock invocation) throws Throwable {
-                return null;
-            }
-        }).when(client).close();
         dispatcher.close();
     }
 
@@ -72,12 +65,14 @@ public class DispatcherTest {
     
     @Test
     public void testNoConnection() throws Exception {
+        dispatcher.setShutdownDelaySeconds(2);
         doThrow(new SocketException()).when(client).writeEvent("{ }");
         dispatcher.dispatchMessage("{ }");
     }
     
     @Test(timeout=20000)
     public void testClosesIfClientWont(){
+        dispatcher.setShutdownDelaySeconds(2);
         Mockito.doAnswer(new Answer<Void>() {
 
             @Override
