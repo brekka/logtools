@@ -16,14 +16,19 @@
 
 package org.brekka.logtools.stash;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import java.net.SocketException;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * TODO Description of DispatcherTest
@@ -60,8 +65,23 @@ public class DispatcherTest {
     
     @Test
     public void testNoConnection() throws Exception {
+        dispatcher.setShutdownDelaySeconds(2);
         doThrow(new SocketException()).when(client).writeEvent("{ }");
         dispatcher.dispatchMessage("{ }");
+    }
+    
+    @Test(timeout=20000)
+    public void testClosesIfClientWont(){
+        dispatcher.setShutdownDelaySeconds(2);
+        Mockito.doAnswer(new Answer<Void>() {
+
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                while (true){}
+            }
+        }).when(client).close();
+        dispatcher.dispatchMessage("{ }");
+        dispatcher.close();
     }
 
 }

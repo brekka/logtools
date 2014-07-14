@@ -38,6 +38,11 @@ class Dispatcher {
     
     private final Client client;
     
+    /**
+     * Maximum time to block the JVM shutdown to clear events.
+     */
+    private int shutdownDelaySeconds = 10;
+    
     public Dispatcher(Client client) {
         this(client, 1000, 4);
     }
@@ -62,21 +67,50 @@ class Dispatcher {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
-                close();
+                // JVM is going down, try to flush as many messages as possible.
+                close(true);
             }
         });
     }
     
+    /**
+     * Close this dispatcher without blocking. Any subsequent call to dispatchMessage will be rejected. 
+     */
     public void close() {
+        close(false);
+    }
+    
+    protected void close(boolean wait) {
         if (!executorService.isShutdown()) {
-            executorService.shutdown();
             try {
-                executorService.awaitTermination(10, TimeUnit.SECONDS);
+                executorService.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        client.close();
+                    }
+                });
+            } catch (RejectedExecutionException e){
+                // Leave the socket open and hope the finalizer gets it
+                if (DEBUG_ENABLED) {
+                    System.err.printf("Dispatcher to '%s' close rejected, must already have been called.%n", client);
+                }
+            }
+            executorService.shutdown();
+        }
+        if (wait && !executorService.isTerminated()) {
+            // The JVM is shutting down. We want to flush as many events as possible before giving up.
+            try {
+                if (executorService.awaitTermination(shutdownDelaySeconds, TimeUnit.SECONDS)) {
+                    if (DEBUG_ENABLED) {
+                        System.err.printf("Shutdown of dispatcher to '%s' failed to process all events%n", client);
+                    }
+                }
             } catch (InterruptedException e) {
-                // Ignore
+                if (DEBUG_ENABLED) {
+                    System.err.printf("Dispatcher to '%s' failed to process all events due to interruption%n", client);
+                }
             }
         }
-        client.close();
     }
 
     public void dispatchMessage(final String message) {
@@ -113,5 +147,13 @@ class Dispatcher {
             }
         }
     }
-
+    
+    /**
+     * @param shutdownDelaySeconds the shutdownDelaySeconds to set
+     */
+    public void setShutdownDelaySeconds(int shutdownDelaySeconds) {
+        if (shutdownDelaySeconds > 0) {
+            this.shutdownDelaySeconds = shutdownDelaySeconds;
+        }
+    }
 }
