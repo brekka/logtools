@@ -1,4 +1,5 @@
 package org.brekka.logtools;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
@@ -19,36 +20,44 @@ import java.net.UnknownHostException;
  */
 
 /**
- * Capture details about the host
+ * Capture details about the host. If the name is not explicitly provided, an attempt will be made to determine the host
+ * name automatically. This can be assisted by setting the 'fqdn' system property, otherwise the name of localhost
+ * adapter will be used.
  *
  * @author Andrew Taylor (andrew@brekka.org)
  */
 public class Host {
-    
+
     private final String fqdn;
-    
+
     /**
      * 
      */
     public Host() {
-        String fqdn;
-        try {
-            InetAddress iAddress = InetAddress.getLocalHost();
-            fqdn = iAddress.getCanonicalHostName();
-        } catch (UnknownHostException e) {
-            fqdn = "unknown_hostname";
-        }
-        this.fqdn = fqdn;
+        this(determineHostName());
     }
-    
+
     public Host(String fqdn) {
         this.fqdn = fqdn;
     }
-    
+
     /**
      * @return the fqdn
      */
     public String getFqdn() {
+        return fqdn;
+    }
+
+    private static final String determineHostName() {
+        String fqdn = System.getProperty("fqdn");
+        if (fqdn != null) {
+            try {
+                InetAddress iAddress = InetAddress.getLocalHost();
+                fqdn = iAddress.getCanonicalHostName();
+            } catch (UnknownHostException e) {
+                fqdn = "unknown_hostname";
+            }
+        }
         return fqdn;
     }
 }
