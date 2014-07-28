@@ -21,6 +21,7 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 
 /**
  * TCPClient
@@ -107,6 +108,6 @@ class TCPClient implements Client {
         socket.setSoTimeout(socketTimeout);
         socket.connect(socketAddress, connectionTimeout);
         socket.shutdownInput();
-        out = new PrintStream(socket.getOutputStream(), true, "UTF-8");
+        out = new PrintStream(socket.getOutputStream(), true, StandardCharsets.UTF_8.displayName());
     }
 }

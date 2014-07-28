@@ -20,24 +20,24 @@ import java.net.UnknownHostException;
  */
 
 /**
- * Capture details about the host. If the name is not explicitly provided, an attempt will be made to determine the host
+ * Capture details about the source host. If the name is not explicitly provided, an attempt will be made to determine the host
  * name automatically. This can be assisted by setting the 'fqdn' system property, otherwise the name of localhost
  * adapter will be used.
  *
  * @author Andrew Taylor (andrew@brekka.org)
  */
-public class Host {
+public class SourceHost {
 
     private final String fqdn;
 
     /**
      * 
      */
-    public Host() {
+    public SourceHost() {
         this(determineHostName());
     }
 
-    public Host(String fqdn) {
+    public SourceHost(String fqdn) {
         this.fqdn = fqdn;
     }
 
@@ -50,7 +50,7 @@ public class Host {
 
     private static final String determineHostName() {
         String fqdn = System.getProperty("fqdn");
-        if (fqdn != null) {
+        if (fqdn == null) {
             try {
                 InetAddress iAddress = InetAddress.getLocalHost();
                 fqdn = iAddress.getCanonicalHostName();

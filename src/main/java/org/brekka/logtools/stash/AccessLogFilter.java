@@ -36,15 +36,13 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.MDC;
-import org.brekka.logtools.Host;
+import org.brekka.logtools.SourceHost;
 
 public class AccessLogFilter implements Filter {
 
     private static final Logger logger = Logger.getLogger(AccessLogFilter.class);
     
-    private String localHostName;
-
-    private Host localHost;
+    private SourceHost sourceHost;
     
     private String mdcProperties;
     
@@ -54,14 +52,9 @@ public class AccessLogFilter implements Filter {
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
-        localHostName = getParamOrDefault(filterConfig,"localHostName",null);
         mdcProperties = getParamOrDefault(filterConfig, "mdcProperties", null);
         priority = Level.toLevel(getParamOrDefault(filterConfig, "priority", "DEBUG"));
-        if (localHostName != null) {
-            localHost = new Host(localHostName);
-        } else {
-            localHost = new Host();
-        }
+        sourceHost = new SourceHost();
         initMDCProperties();
     }
     
@@ -72,8 +65,6 @@ public class AccessLogFilter implements Filter {
         }
         return initParameter;
     }
-
-
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
@@ -90,11 +81,9 @@ public class AccessLogFilter implements Filter {
         }
     }
 
-
-
     @Override
     public void destroy() {
-        
+        // Not needed
     }
     
     protected void log(HttpServletRequest req, HttpServletResponse resp, long time) {
@@ -125,10 +114,7 @@ public class AccessLogFilter implements Filter {
                 }
             }
         }
-        
     }
-
-
 
     /**
      * @param req
@@ -144,7 +130,7 @@ public class AccessLogFilter implements Filter {
             processFields(req, resp, out);
             out.print("},");
             out.printf("\"@timestamp\": \"%tFT%<tT.%<tLZ\",", System.currentTimeMillis());
-            out.printf("\"@source_host\": \"%s\",", localHost.getFqdn());
+            out.printf("\"@source_host\": \"%s\",", sourceHost.getFqdn());
             out.printf("\"@source_path\": \"%s\",", req.getRequestURI());
             // Make sure last (no trailing comma)
             out.printf("\"@message\": \"%s\"", req.getRequestURL());
@@ -177,5 +163,4 @@ public class AccessLogFilter implements Filter {
         // Last (no trailing comma)
         out.printf("\"status_code\": %d", resp.getStatus());
     }
-    
 }

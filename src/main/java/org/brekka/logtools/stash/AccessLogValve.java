@@ -26,13 +26,15 @@ import java.util.Map.Entry;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.log4j.MDC;
-import org.brekka.logtools.Host;
+import org.brekka.logtools.SourceHost;
 
 /**
  * Extension to the access log valve that will attempt to write each event to a remote logstash server (via TCP input).
  * 
  * @author Andrew Taylor (andrew@brekka.org)
+ * @deprecated Filter equivalent should be used instead.
  */
+@Deprecated
 public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
 
     private String host;
@@ -50,7 +52,7 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
     private String localHostName;
 
     private volatile Dispatcher dispatcher;
-    private Host localHost;
+    private SourceHost localHost;
     
     private String mdcProperties;
     private volatile Map<String,String> mdcProps;
@@ -159,9 +161,9 @@ public class AccessLogValve extends org.apache.catalina.valves.AccessLogValve {
                     client.setSocketTimeout(socketTimeoutMillis);
                     dispatcher = new Dispatcher(client, eventBufferSize, priority);
                     if (localHostName != null) {
-                        localHost = new Host(localHostName);
+                        localHost = new SourceHost(localHostName);
                     } else {
-                        localHost = new Host();
+                        localHost = new SourceHost();
                     }
                 }
             }

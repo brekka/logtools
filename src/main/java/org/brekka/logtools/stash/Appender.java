@@ -26,7 +26,7 @@ import java.util.Map.Entry;
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.log4j.spi.ThrowableInformation;
-import org.brekka.logtools.Host;
+import org.brekka.logtools.SourceHost;
 
 /**
  * Log4J appender for writing events to LogStash via the TCP input.
@@ -35,8 +35,14 @@ import org.brekka.logtools.Host;
  */
 public class Appender extends AppenderSkeleton {
 
+    /**
+     * The logging server host name
+     */
     private String host;
 
+    /**
+     * The logging server listening port.
+     */
     private int port;
 
     private int connectionTimeoutMillis;
@@ -47,12 +53,18 @@ public class Appender extends AppenderSkeleton {
 
     private int eventBufferSize = 1000;
 
+    /**
+     * The name of the application sending the events
+     */
     private String application;
     
-    private String localHostName;
+    /**
+     * Where the message should appear to come from (usually fqdn of the host).
+     */
+    private String sourceHostName;
 
     private volatile Dispatcher dispatcher;
-    private Host localHost;
+    private SourceHost sourceHost;
     
     private String mdcProperties;
     private volatile Map<String,String> mdcProps;
@@ -173,17 +185,35 @@ public class Appender extends AppenderSkeleton {
     }
     
     /**
-     * @return the localHostName
+     * @return the sourceHostName
+     * @deprecated use getSourceHostName() instead
      */
+    @Deprecated
     public String getLocalHostName() {
-        return localHostName;
+        return sourceHostName;
     }
 
     /**
-     * @param localHostName the localHostName to set
+     * @param sourceHostName the sourceHostName to set
+     * @deprecated use setSourceHostName() instead
      */
+    @Deprecated
     public void setLocalHostName(String localHostName) {
-        this.localHostName = localHostName;
+        this.sourceHostName = localHostName;
+    }
+    
+    /**
+     * @return the sourceHostName
+     */
+    public String getSourceHostName() {
+        return sourceHostName;
+    }
+
+    /**
+     * @param sourceHostName the sourceHostName to set
+     */
+    public void setSourceHostName(String sourceHostName) {
+        this.sourceHostName = sourceHostName;
     }
 
     /*
@@ -221,7 +251,7 @@ public class Appender extends AppenderSkeleton {
             processFields(event, out);
             out.print("},");
             out.printf("\"@timestamp\":\"%tFT%<tT.%<tLZ\",", event.getTimeStamp());
-            out.printf("\"@source_host\":\"%s\",", localHost.getFqdn());
+            out.printf("\"@source_host\":\"%s\",", sourceHost.getFqdn());
             out.printf("\"@source_path\":\"%s\",", event.getLoggerName());
             // Make sure last (no trailing comma)
             out.printf("\"@message\":\"%s\"", event.getMessage());
@@ -279,10 +309,10 @@ public class Appender extends AppenderSkeleton {
                     client.setConnectionTimeout(connectionTimeoutMillis);
                     client.setSocketTimeout(socketTimeoutMillis);
                     dispatcher = new Dispatcher(client, eventBufferSize, priority);
-                    if (localHostName != null) {
-                        localHost = new Host(localHostName);
+                    if (sourceHostName != null) {
+                        sourceHost = new SourceHost(sourceHostName);
                     } else {
-                        localHost = new Host();
+                        sourceHost = new SourceHost();
                     }
                 }
             }
@@ -310,7 +340,6 @@ public class Appender extends AppenderSkeleton {
                 }
             }
         }
-        
     }
 
     /**
