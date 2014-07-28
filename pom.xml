@@ -8,7 +8,7 @@
 
     <groupId>org.brekka.logtools</groupId>
     <artifactId>logtools</artifactId>
-    <version>1.2.0-SNAPSHOT</version>
+    <version>1.2.0</version>
 
     <name>Log Tools</name>
 
@@ -22,7 +22,7 @@
         <url>https://github.com/brekka/logtools.git</url>
         <connection>https://github.com/brekka/logtools.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/brekka/logtools.git</developerConnection>
-        <tag>HEAD</tag>
+        <tag>v1.2.0</tag>
     </scm>
 
     <licenses>
