@@ -17,14 +17,21 @@
 package org.brekka.logtools.stash;
 
 import java.io.IOException;
-import java.io.PrintStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 
 /**
- * TCPClient
+ * TCPClient.
+ * 
+ * This implementation does a lot of flushing to ensure that an exception is thrown when a message could not be
+ * written. As such it is not going to work particularly well in high throughput scenarios.
+ * 
+ * The goal is to replace this with an alternative solution in the near future. At this time we just want to ensure 
+ * messages get written in our low-throughput environment.
  *
  * @author Andrew Taylor (andrew@brekka.org)
  */
@@ -36,7 +43,7 @@ class TCPClient implements Client {
     
     private Socket socket;
     
-    private PrintStream out;
+    private Writer out;
     
     /**
      * 
@@ -54,13 +61,21 @@ class TCPClient implements Client {
             close();
             establish();
         }
-        out.println(line);
+        out.write(line);
+        out.flush();
+        out.write("\n");
+        // Might seem inefficient but this ensures we always get an exception if the message could not be written.
         out.flush();
     }
 
+    @Override
     public void close() {
         if (out != null) {
-            out.close();
+            try {
+                out.close();
+            } catch (IOException e) {
+                // Ignore
+            }
             out = null;
         }
         if (socket != null) {
@@ -106,8 +121,9 @@ class TCPClient implements Client {
         socket = new Socket();
         socket.setKeepAlive(true);
         socket.setSoTimeout(socketTimeout);
+        socket.setTcpNoDelay(true);
         socket.connect(socketAddress, connectionTimeout);
         socket.shutdownInput();
-        out = new PrintStream(socket.getOutputStream(), true, StandardCharsets.UTF_8.displayName());
+        out = new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8);
     }
 }

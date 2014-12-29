@@ -22,6 +22,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Dispatches event messages to logstash using the specified client. Messages will be queued for sending in case
@@ -37,6 +38,8 @@ class Dispatcher {
     private final ExecutorService executorService;
     
     private final Client client;
+    
+    private final AtomicLong counter = new AtomicLong();
     
     /**
      * Maximum time to block the JVM shutdown to clear events.
@@ -122,6 +125,7 @@ class Dispatcher {
                         try {
                             client.writeEvent(message);
                             // Written successfully
+                            counter.incrementAndGet();
                             return;
                         } catch (Exception e) {
                             client.close();

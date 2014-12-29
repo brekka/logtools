@@ -38,9 +38,13 @@ public class MockLogStashServer implements Runnable {
     
     private ServerSocket serverSocket;
     
+    private Socket currentSocket;
+    
     private ExecutorService executorService = Executors.newFixedThreadPool(2);
     
     private LinkedList<String> messages = new LinkedList<>();
+    
+    private boolean shutdown = false;
     /**
      * 
      */
@@ -56,6 +60,7 @@ public class MockLogStashServer implements Runnable {
     public void run() {
         try {
             final Socket socket = serverSocket.accept();
+            currentSocket = socket;
             executorService.submit(new Runnable() {
                 @Override
                 public void run() {
@@ -63,8 +68,7 @@ public class MockLogStashServer implements Runnable {
                 }
             });
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            // Socket closed
         }
         executorService.submit(this);
     }
@@ -72,7 +76,7 @@ public class MockLogStashServer implements Runnable {
     protected void handleSocket(Socket socket) {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
             String line;
-            while (null != (line = br.readLine())) {
+            while (!shutdown && null != (line = br.readLine())) {
                 messages.add(line);
             }
             socket.close();
@@ -89,6 +93,19 @@ public class MockLogStashServer implements Runnable {
     }
     
     public void close() {
+        shutdown = true;
+        try {
+            serverSocket.close();
+        } catch (IOException e) {
+            throw new RuntimeException("IO", e);
+        }
+        try {
+            currentSocket.shutdownInput();
+            currentSocket.shutdownOutput();
+            currentSocket.close();
+        } catch (IOException e) {
+            throw new RuntimeException("IO", e);
+        }
         executorService.shutdown();
     }
 }
