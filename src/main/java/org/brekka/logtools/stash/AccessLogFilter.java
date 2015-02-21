@@ -38,14 +38,19 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.MDC;
 import org.brekka.logtools.SourceHost;
 
+/**
+ * Servlet filter used to capture and log request/response access details to the Log4J logger named after this class.
+ */
 public class AccessLogFilter implements Filter {
 
     private static final Logger logger = Logger.getLogger(AccessLogFilter.class);
-    
+
+    private FilterConfig config;
+
     private SourceHost sourceHost;
-    
+
     private String mdcProperties;
-    
+
     private Map<String,String> mdcProps;
 
     private Level priority;
@@ -56,8 +61,9 @@ public class AccessLogFilter implements Filter {
         priority = Level.toLevel(getParamOrDefault(filterConfig, "priority", "DEBUG"));
         sourceHost = new SourceHost();
         initMDCProperties();
+        this.config = filterConfig;
     }
-    
+
     protected String getParamOrDefault(FilterConfig filterConfig, String paramName,String defaultValue){
         String initParameter = filterConfig.getInitParameter(paramName);
         if (initParameter==null){
@@ -76,7 +82,7 @@ public class AccessLogFilter implements Filter {
                 HttpServletResponse resp = (HttpServletResponse) response;
                 log(req, resp, System.nanoTime());
             } catch (Exception e){
-                //Logging error doesn't prevent filter chain execution
+                config.getServletContext().log("Failed to log access", e);
             }
         }
     }
@@ -85,13 +91,12 @@ public class AccessLogFilter implements Filter {
     public void destroy() {
         // Not needed
     }
-    
+
     protected void log(HttpServletRequest req, HttpServletResponse resp, long time) {
         // Log as normal
         String eventJson = toJsonString(req, resp, time);
         logger.log(priority, eventJson);
     }
-    
 
     /**
      * 
@@ -158,7 +163,7 @@ public class AccessLogFilter implements Filter {
         }
 
         // Response
-        out.printf("\"response_length\": %d,", resp.getHeader("Content-Length"));
+        out.printf("\"response_length\": %s,", resp.getHeader("Content-Length"));
         out.printf("\"response_content_type\": \"%s\",", resp.getContentType());
         // Last (no trailing comma)
         out.printf("\"status_code\": %d", resp.getStatus());
