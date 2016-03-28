@@ -32,29 +32,29 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author Andrew Taylor (andrew@brekka.org)
  */
 class Dispatcher {
-    
+
     private static final boolean DEBUG_ENABLED = "true".equals(System.getProperty("logtools.dispatcher.debug"));
-    
+
     private final ExecutorService executorService;
-    
+
     private final Client client;
-    
+
     private final AtomicLong counter = new AtomicLong();
-    
+
     /**
      * Maximum time to block the JVM shutdown to clear events.
      */
     private int shutdownDelaySeconds = 10;
-    
-    public Dispatcher(Client client) {
+
+    public Dispatcher(final Client client) {
         this(client, 1000, 4);
     }
-    
-    public Dispatcher(Client client, int eventBufferSize, final int priority) {
+
+    public Dispatcher(final Client client, final int eventBufferSize, final int priority) {
         this.client = client;
         ThreadFactory tf = new ThreadFactory() {
             @Override
-            public Thread newThread(Runnable r) {
+            public Thread newThread(final Runnable r) {
                 Thread t = new Thread(r, "LogStashDispatcher");
                 t.setDaemon(true);
                 // Slightly below normal
@@ -62,11 +62,11 @@ class Dispatcher {
                 return t;
             }
         };
-        
+
         // Just one daemon thread.
         executorService = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>(eventBufferSize), tf);
-        
+
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
@@ -75,15 +75,15 @@ class Dispatcher {
             }
         });
     }
-    
+
     /**
-     * Close this dispatcher without blocking. Any subsequent call to dispatchMessage will be rejected. 
+     * Close this dispatcher without blocking. Any subsequent call to dispatchMessage will be rejected.
      */
     public void close() {
         close(false);
     }
-    
-    protected void close(boolean wait) {
+
+    protected void close(final boolean wait) {
         if (!executorService.isShutdown()) {
             try {
                 executorService.submit(new Runnable() {
@@ -151,11 +151,11 @@ class Dispatcher {
             }
         }
     }
-    
+
     /**
      * @param shutdownDelaySeconds the shutdownDelaySeconds to set
      */
-    public void setShutdownDelaySeconds(int shutdownDelaySeconds) {
+    public void setShutdownDelaySeconds(final int shutdownDelaySeconds) {
         if (shutdownDelaySeconds > 0) {
             this.shutdownDelaySeconds = shutdownDelaySeconds;
         }

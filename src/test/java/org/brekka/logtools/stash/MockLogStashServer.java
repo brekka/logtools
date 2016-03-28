@@ -25,34 +25,30 @@ import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.net.SocketFactory;
-
-import org.apache.log4j.net.SocketServer;
-
 /**
  * TODO Description of MockLogStashServer
  *
  * @author Andrew Taylor (andrew@brekka.org)
  */
 public class MockLogStashServer implements Runnable {
-    
+
     private ServerSocket serverSocket;
-    
+
     private Socket currentSocket;
-    
+
     private ExecutorService executorService = Executors.newFixedThreadPool(2);
-    
+
     private LinkedList<String> messages = new LinkedList<>();
-    
+
     private boolean shutdown = false;
     /**
-     * 
+     *
      */
     public MockLogStashServer() throws Exception {
         serverSocket = new ServerSocket(9033);
         executorService.submit(this);
     }
-    
+
     /* (non-Javadoc)
      * @see java.lang.Runnable#run()
      */
@@ -72,8 +68,8 @@ public class MockLogStashServer implements Runnable {
         }
         executorService.submit(this);
     }
-    
-    protected void handleSocket(Socket socket) {
+
+    protected void handleSocket(final Socket socket) {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
             String line;
             while (!shutdown && null != (line = br.readLine())) {
@@ -81,30 +77,34 @@ public class MockLogStashServer implements Runnable {
             }
             socket.close();
         } catch (IOException e) {
-            
+
         }
     }
-    
+
     /**
      * @return the messages
      */
     public LinkedList<String> getMessages() {
         return messages;
     }
-    
+
     public void close() {
         shutdown = true;
-        try {
-            serverSocket.close();
-        } catch (IOException e) {
-            throw new RuntimeException("IO", e);
+        if (serverSocket != null) {
+            try {
+                serverSocket.close();
+            } catch (IOException e) {
+                throw new RuntimeException("IO", e);
+            }
         }
-        try {
-            currentSocket.shutdownInput();
-            currentSocket.shutdownOutput();
-            currentSocket.close();
-        } catch (IOException e) {
-            throw new RuntimeException("IO", e);
+        if (currentSocket != null) {
+            try {
+                currentSocket.shutdownInput();
+                currentSocket.shutdownOutput();
+                currentSocket.close();
+            } catch (IOException e) {
+                throw new RuntimeException("IO", e);
+            }
         }
         executorService.shutdown();
     }

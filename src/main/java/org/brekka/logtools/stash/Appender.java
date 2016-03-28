@@ -16,21 +16,30 @@
 
 package org.brekka.logtools.stash;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 
 import org.apache.log4j.AppenderSkeleton;
+import org.apache.log4j.MDC;
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.log4j.spi.ThrowableInformation;
 import org.brekka.logtools.SourceHost;
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 /**
  * Log4J appender for writing events to LogStash via the TCP input.
- * 
+ *
  * @author Andrew Taylor (andrew@brekka.org)
  */
 public class Appender extends AppenderSkeleton {
@@ -57,7 +66,7 @@ public class Appender extends AppenderSkeleton {
      * The name of the application sending the events
      */
     private String application;
-    
+
     /**
      * Where the message should appear to come from (usually fqdn of the host).
      */
@@ -65,13 +74,15 @@ public class Appender extends AppenderSkeleton {
 
     private volatile Dispatcher dispatcher;
     private SourceHost sourceHost;
-    
+
     private String mdcProperties;
     private volatile Map<String,String> mdcProps;
 
+    private ObjectMapper objectMapper;
+
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see org.apache.log4j.Appender#close()
      */
     @Override
@@ -87,14 +98,14 @@ public class Appender extends AppenderSkeleton {
     public int getPort() {
         return port;
     }
-    
+
     /**
      * @param host the host to set
      */
-    public void setHost(String host) {
+    public void setHost(final String host) {
         this.host = host;
     }
-    
+
     /**
      * @return the host
      */
@@ -106,7 +117,7 @@ public class Appender extends AppenderSkeleton {
      * @param port
      *            the port to set
      */
-    public void setPort(int port) {
+    public void setPort(final int port) {
         this.port = port;
     }
 
@@ -121,7 +132,7 @@ public class Appender extends AppenderSkeleton {
      * @param connectionTimeoutMillis
      *            the connectionTimeoutMillis to set
      */
-    public void setConnectionTimeoutMillis(int connectionTimeoutMillis) {
+    public void setConnectionTimeoutMillis(final int connectionTimeoutMillis) {
         this.connectionTimeoutMillis = connectionTimeoutMillis;
     }
 
@@ -136,7 +147,7 @@ public class Appender extends AppenderSkeleton {
      * @param socketTimeoutMillis
      *            the socketTimeoutMillis to set
      */
-    public void setSocketTimeoutMillis(int socketTimeoutMillis) {
+    public void setSocketTimeoutMillis(final int socketTimeoutMillis) {
         this.socketTimeoutMillis = socketTimeoutMillis;
     }
 
@@ -151,7 +162,7 @@ public class Appender extends AppenderSkeleton {
      * @param eventBufferSize
      *            the eventBufferSize to set
      */
-    public void setEventBufferSize(int eventBufferSize) {
+    public void setEventBufferSize(final int eventBufferSize) {
         this.eventBufferSize = eventBufferSize;
     }
 
@@ -166,7 +177,7 @@ public class Appender extends AppenderSkeleton {
      * @param application
      *            the application to set
      */
-    public void setApplication(String application) {
+    public void setApplication(final String application) {
         this.application = application;
     }
 
@@ -180,10 +191,10 @@ public class Appender extends AppenderSkeleton {
     /**
      * @param priority the priority to set
      */
-    public void setPriority(int priority) {
+    public void setPriority(final int priority) {
         this.priority = priority;
     }
-    
+
     /**
      * @return the sourceHostName
      * @deprecated use getSourceHostName() instead
@@ -198,10 +209,10 @@ public class Appender extends AppenderSkeleton {
      * @deprecated use setSourceHostName() instead
      */
     @Deprecated
-    public void setLocalHostName(String localHostName) {
+    public void setLocalHostName(final String localHostName) {
         this.sourceHostName = localHostName;
     }
-    
+
     /**
      * @return the sourceHostName
      */
@@ -212,80 +223,69 @@ public class Appender extends AppenderSkeleton {
     /**
      * @param sourceHostName the sourceHostName to set
      */
-    public void setSourceHostName(String sourceHostName) {
+    public void setSourceHostName(final String sourceHostName) {
         this.sourceHostName = sourceHostName;
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.log4j.Appender#requiresLayout()
-     */
     @Override
     public boolean requiresLayout() {
         return false;
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.log4j.AppenderSkeleton#append(org.apache.log4j.spi.LoggingEvent)
-     */
     @Override
-    protected void append(LoggingEvent event) {
+    protected void append(final LoggingEvent event) {
         initDispatcher();
         initMDCProperties();
         String eventJson = toJsonString(event);
         dispatcher.dispatchMessage(eventJson);
     }
 
-    /**
-     * @param event
-     * @return
-     */
-    protected String toJsonString(LoggingEvent event) {
-        StringWriter sw = new StringWriter();
-        try (PrintWriter out = new PrintWriter(sw);) {
-            out.print('{');
-            out.print("\"@fields\":{");
-            processFields(event, out);
-            out.print("},");
-            out.printf("\"@timestamp\":\"%tFT%<tT.%<tLZ\",", event.getTimeStamp());
-            out.printf("\"@source_host\":\"%s\",", sourceHost.getFqdn());
-            out.printf("\"@source_path\":\"%s\",", event.getLoggerName());
-            // Make sure last (no trailing comma)
-            out.printf("\"@message\":\"%s\"", event.getMessage());
-            out.print('}');
+    protected String toJsonString(final LoggingEvent event) {
+        try {
+            ObjectNode node = toObjectNode(event);
+            String eventJson = objectMapper.writeValueAsString(node);
+            return eventJson;
+        } catch (final IOException e) {
+            throw new IllegalStateException("Unable to append event", e);
         }
-        return sw.toString();
     }
 
-    
     /**
-     * @param event
-     * @param out
+     * @param req
+     * @param resp
+     * @return
      */
-    protected void processFields(LoggingEvent event, PrintWriter out) {
-        out.printf("\"logger_name\":\"%s\",", event.getLoggerName());
-        out.printf("\"thread\":\"%s\",", event.getThreadName());
-        for (Entry<String,String> mdcEntry : mdcProps.entrySet()){
-            out.printf("\"%s\": \"%s\",", mdcEntry.getKey(), event.getMDC(mdcEntry.getValue()));
-        }
+    protected ObjectNode toObjectNode(final LoggingEvent event) {
+        ObjectNode json = objectMapper.createObjectNode();
+        json.putPOJO("@timestamp", new Date(event.getTimeStamp()));
+        json.put("@source_host", sourceHost.getFqdn());
+        json.put("@source_path", event.getLoggerName());
+        json.put("@message", Objects.toString(event.getMessage(), null));
+        ObjectNode fields = json.putObject("@fields");
+        processFields(fields, event);
+        return json;
+    }
+
+    protected void processFields(final ObjectNode json, final LoggingEvent event) {
+        json.put("logger_name", event.getLoggerName());
+        json.put("thread", event.getThreadName());
+        json.put("priority", Objects.toString(event.getLevel(), null));
         if (application != null) {
-            out.printf("\"application\":\"%s\",", application);
+            json.put("application", application);
         }
         if (event.getThrowableInformation() != null) {
-            out.printf("\"stack_trace\":\"%s\",", formatStackTrace(event));
+            json.put("stack_trace", formatStackTrace(event));
         }
-        // Make sure last, has no trailing comma
-        out.printf("\"priority\":\"%s\"", event.getLevel());
+        for (Entry<String,String> mdcEntry : mdcProps.entrySet()){
+            json.put(mdcEntry.getKey(), Objects.toString(MDC.get(mdcEntry.getValue()), null));
+        }
     }
 
     /**
      * @param event
      * @return
      */
-    protected String formatStackTrace(LoggingEvent event) {
+    protected String formatStackTrace(final LoggingEvent event) {
         ThrowableInformation throwableInformation = event.getThrowableInformation();
         Throwable throwable = throwableInformation.getThrowable();
         StringWriter sw = new StringWriter();
@@ -299,7 +299,7 @@ public class Appender extends AppenderSkeleton {
     }
 
     /**
-     * 
+     *
      */
     private void initDispatcher() {
         if (dispatcher == null) {
@@ -314,13 +314,16 @@ public class Appender extends AppenderSkeleton {
                     } else {
                         sourceHost = new SourceHost();
                     }
+                    objectMapper = new ObjectMapper();
+                    objectMapper.setConfig(objectMapper.getSerializationConfig().withoutFeatures(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));
+                    objectMapper.setSerializationInclusion(Include.NON_NULL);
                 }
             }
         }
     }
-    
+
     /**
-     * 
+     *
      */
     private void initMDCProperties() {
         if (mdcProps == null) {
@@ -345,7 +348,7 @@ public class Appender extends AppenderSkeleton {
     /**
      * @param mdcProperties the mdcProperties to set
      */
-    public void setMdcProperties(String mdcProperties) {
+    public void setMdcProperties(final String mdcProperties) {
         this.mdcProperties = mdcProperties;
     }
 }

@@ -17,12 +17,12 @@
 package org.brekka.logtools.stash;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -37,6 +37,11 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.MDC;
 import org.brekka.logtools.SourceHost;
+
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Servlet filter used to capture and log request/response access details to the Log4J logger named after this class.
@@ -55,16 +60,21 @@ public class AccessLogFilter implements Filter {
 
     private Level priority;
 
+    private ObjectMapper objectMapper;
+
     @Override
-    public void init(FilterConfig filterConfig) throws ServletException {
+    public void init(final FilterConfig filterConfig) throws ServletException {
         mdcProperties = getParamOrDefault(filterConfig, "mdcProperties", null);
         priority = Level.toLevel(getParamOrDefault(filterConfig, "priority", "DEBUG"));
         sourceHost = new SourceHost();
         initMDCProperties();
-        this.config = filterConfig;
+        config = filterConfig;
+        objectMapper = new ObjectMapper();
+        objectMapper.setConfig(objectMapper.getSerializationConfig().withoutFeatures(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));
+        objectMapper.setSerializationInclusion(Include.NON_NULL);
     }
 
-    protected String getParamOrDefault(FilterConfig filterConfig, String paramName,String defaultValue){
+    protected String getParamOrDefault(final FilterConfig filterConfig, final String paramName,final String defaultValue){
         String initParameter = filterConfig.getInitParameter(paramName);
         if (initParameter==null){
             return defaultValue;
@@ -73,14 +83,14 @@ public class AccessLogFilter implements Filter {
     }
 
     @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+    public void doFilter(final ServletRequest request, final ServletResponse response, final FilterChain chain) throws IOException, ServletException {
         try {
             chain.doFilter(request, response);
         } finally {
             try {
                 HttpServletRequest req = (HttpServletRequest) request;
                 HttpServletResponse resp = (HttpServletResponse) response;
-                log(req, resp, System.nanoTime());
+                log(req, resp);
             } catch (Exception e){
                 config.getServletContext().log("Failed to log access", e);
             }
@@ -92,14 +102,35 @@ public class AccessLogFilter implements Filter {
         // Not needed
     }
 
-    protected void log(HttpServletRequest req, HttpServletResponse resp, long time) {
-        // Log as normal
-        String eventJson = toJsonString(req, resp, time);
-        logger.log(priority, eventJson);
+    protected void log(final HttpServletRequest req, final HttpServletResponse resp) {
+        try {
+            ObjectNode node = toObjectNode(req, resp);
+            // Log as normal
+            String eventJson = objectMapper.writeValueAsString(node);
+            logger.log(priority, eventJson);
+        } catch (final IOException e) {
+            req.getServletContext().log("Failed to write access log", e);
+        }
     }
 
     /**
-     * 
+     * @param req
+     * @param resp
+     * @return
+     */
+    protected ObjectNode toObjectNode(final HttpServletRequest req, final HttpServletResponse resp) {
+        ObjectNode json = objectMapper.createObjectNode();
+        json.putPOJO("@timestamp", new Date());
+        json.put("@source_host", sourceHost.getFqdn());
+        json.put("@source_path", req.getRequestURI());
+        json.put("@message", req.getRequestURL().toString());
+        ObjectNode fields = json.putObject("@fields");
+        processFields(fields, req, resp);
+        return json;
+    }
+
+    /**
+     *
      */
     private void initMDCProperties() {
         if (mdcProps == null) {
@@ -121,51 +152,21 @@ public class AccessLogFilter implements Filter {
         }
     }
 
-    /**
-     * @param req
-     * @param resp
-     * @param time
-     * @return
-     */
-    protected String toJsonString(HttpServletRequest req, HttpServletResponse resp, long time) {
-        StringWriter sw = new StringWriter();
-        try (PrintWriter out = new PrintWriter(sw);) {
-            out.print('{');
-            out.print("\"@fields\": {");
-            processFields(req, resp, out);
-            out.print("},");
-            out.printf("\"@timestamp\": \"%tFT%<tT.%<tLZ\",", System.currentTimeMillis());
-            out.printf("\"@source_host\": \"%s\",", sourceHost.getFqdn());
-            out.printf("\"@source_path\": \"%s\",", req.getRequestURI());
-            // Make sure last (no trailing comma)
-            out.printf("\"@message\": \"%s\"", req.getRequestURL());
-            out.print('}');
-        }
-        return sw.toString();
-    }
+    protected void processFields(final ObjectNode json, final HttpServletRequest req, final HttpServletResponse resp) {
+        json.put("remote_host", req.getRemoteHost());
+        json.put("remote_user", req.getRemoteUser());
+        json.put("query", req.getQueryString());
+        json.put("uri", req.getRequestURI());
+        json.put("request_length", req.getContentLength());
+        json.put("protocol", req.getProtocol());
+        json.put("method", req.getMethod());
+        json.put("request_content_type", req.getContentType());
+        json.put("response_length", resp.getHeader("Content-Length"));
+        json.put("response_content_type", resp.getContentType());
+        json.put("status_code", resp.getStatus());
 
-    /**
-     * @param req
-     * @param resp
-     */
-    protected void processFields(HttpServletRequest req, HttpServletResponse resp, PrintWriter out) {
-        // Request
-        out.printf("\"remote_host\": \"%s\",", req.getRemoteHost());
-        out.printf("\"remote_user\": \"%s\",", req.getRemoteUser());
-        out.printf("\"query\": \"%s\",", req.getQueryString());
-        out.printf("\"uri\": \"%s\",", req.getRequestURI());
-        out.printf("\"request_length\": %d,", req.getContentLength());
-        out.printf("\"protocol\": \"%s\",", req.getProtocol());
-        out.printf("\"method\": \"%s\",", req.getMethod());
-        out.printf("\"request_content_type\": \"%s\",", req.getContentType());
         for (Entry<String,String> mdcEntry : mdcProps.entrySet()){
-            out.printf("\"%s\": \"%s\",", mdcEntry.getKey(), MDC.get(mdcEntry.getValue()));
+            json.put(mdcEntry.getKey(), Objects.toString(MDC.get(mdcEntry.getValue()), null));
         }
-
-        // Response
-        out.printf("\"response_length\": %s,", resp.getHeader("Content-Length"));
-        out.printf("\"response_content_type\": \"%s\",", resp.getContentType());
-        // Last (no trailing comma)
-        out.printf("\"status_code\": %d", resp.getStatus());
     }
 }
